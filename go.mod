@@ -1,4 +1,4 @@
-module github.com/avanha/pmaas-plugins-gotexttemplate
+module github.com/avanha/pmaas-plugin-gotexttemplate
 
 go 1.22
 
