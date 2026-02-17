@@ -47,7 +47,7 @@ type templateLoadState struct {
 	loadComplete bool
 }
 
-func NewGoLangTextTemplatePlugin(config PluginConfig) Plugin {
+func NewPlugin(config PluginConfig) Plugin {
 	instance := &plugin{
 		state: &state{
 			config:    config,
