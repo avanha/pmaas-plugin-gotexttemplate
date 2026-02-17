@@ -15,31 +15,31 @@ import (
 var _defaultTemplateModTime = time.Unix(0, 0)
 
 type state struct {
-	config     GoLangTextTemplatePluginConfig
+	config     PluginConfig
 	container  spi.IPMAASContainer
 	cache      map[string]templateLoadState
 	cacheMutex sync.Mutex
 }
 
-type goLangTextTemplatePlugin struct {
+type plugin struct {
 	state *state
 }
 
-type GoLangTextTemplatePlugin interface {
+type Plugin interface {
 	spi.IPMAASTemplateEnginePlugin
 }
 
-type goLangTextTemplateWrapper struct {
+type goTextTemplateWrapper struct {
 	template     *template.Template
 	templateName string
 	fileModTimes map[string]time.Time
 }
 
 // A function that returns the result of a template load operation.
-type templateProvider func() (goLangTextTemplateWrapper, error)
+type templateProvider func() (goTextTemplateWrapper, error)
 
 // A function that consumes the result of a template load operation.
-type templateResultConsumer func(goLangTextTemplateWrapper, error)
+type templateResultConsumer func(goTextTemplateWrapper, error)
 
 type templateLoadState struct {
 	provider     templateProvider
@@ -47,8 +47,8 @@ type templateLoadState struct {
 	loadComplete bool
 }
 
-func NewGoLangTextTemplatePlugin(config GoLangTextTemplatePluginConfig) GoLangTextTemplatePlugin {
-	instance := &goLangTextTemplatePlugin{
+func NewGoLangTextTemplatePlugin(config PluginConfig) Plugin {
+	instance := &plugin{
 		state: &state{
 			config:    config,
 			container: nil,
@@ -60,21 +60,21 @@ func NewGoLangTextTemplatePlugin(config GoLangTextTemplatePluginConfig) GoLangTe
 }
 
 // Implementation of spi.IPMAASPlugin
-var _ spi.IPMAASTemplateEnginePlugin = (*goLangTextTemplatePlugin)(nil)
+var _ spi.IPMAASTemplateEnginePlugin = (*plugin)(nil)
 
-func (p *goLangTextTemplatePlugin) Init(container spi.IPMAASContainer) {
+func (p *plugin) Init(container spi.IPMAASContainer) {
 	p.state.container = container
 }
 
-func (p *goLangTextTemplatePlugin) Start() {
+func (p *plugin) Start() {
 	fmt.Printf("%s Starting...\n", *p)
 }
 
-func (p *goLangTextTemplatePlugin) Stop() {
+func (p *plugin) Stop() {
 	fmt.Printf("%s Stopping...\n", *p)
 }
 
-func (p *goLangTextTemplatePlugin) GetTemplate(templateInfo *spi.TemplateInfo) (spi.CompiledTemplate, error) {
+func (p *plugin) GetTemplate(templateInfo *spi.TemplateInfo) (spi.CompiledTemplate, error) {
 	startTime := time.Now()
 	templateInstance, err := p.getTemplateProvider(templateInfo)()
 
@@ -91,11 +91,11 @@ func (p *goLangTextTemplatePlugin) GetTemplate(templateInfo *spi.TemplateInfo) (
 	}, nil
 }
 
-// Returns a no-arg template provider function that returns an instance of goLangTextTemplateWrapper.
-// goLangTextTemplateWrapper implements the spi.ITemplate interface.  This thread-safe function maintains the cache of
+// Returns a no-arg template provider function that returns an instance of goTextTemplateWrapper.
+// goTextTemplateWrapper implements the spi.ITemplate interface.  This thread-safe function maintains the cache of
 // loaded templates and optimizes further by replacing the provider obtained from createTemplateProvider with one that
 // simply returns a previously loaded value, avoiding synchronization within the loader.
-func (p *goLangTextTemplatePlugin) getTemplateProvider(templateInfo *spi.TemplateInfo) templateProvider {
+func (p *plugin) getTemplateProvider(templateInfo *spi.TemplateInfo) templateProvider {
 	p.state.cacheMutex.Lock()
 	defer p.state.cacheMutex.Unlock()
 
@@ -114,14 +114,14 @@ func (p *goLangTextTemplatePlugin) getTemplateProvider(templateInfo *spi.Templat
 	}
 
 	if loadNeeded {
-		onTemplateLoadDone := func(template goLangTextTemplateWrapper, err error) {
+		onTemplateLoadDone := func(template goTextTemplateWrapper, err error) {
 			// When the template is actually loaded, asynchronously replace the loading provider with one that returns
 			// the given result. This saves the overhead of sync.Once for future calls.
 			go func() {
 				p.state.cacheMutex.Lock()
 				defer p.state.cacheMutex.Unlock()
 
-				optimizedProvider := func() (goLangTextTemplateWrapper, error) {
+				optimizedProvider := func() (goTextTemplateWrapper, error) {
 					return template, err
 				}
 
@@ -132,7 +132,7 @@ func (p *goLangTextTemplatePlugin) getTemplateProvider(templateInfo *spi.Templat
 				}
 			}()
 		}
-		var currentTemplateWrapper goLangTextTemplateWrapper
+		var currentTemplateWrapper goTextTemplateWrapper
 
 		if loadState.loadComplete {
 			tw, err := loadState.provider()
@@ -154,18 +154,18 @@ func (p *goLangTextTemplatePlugin) getTemplateProvider(templateInfo *spi.Templat
 	return loadState.provider
 }
 
-func (p *goLangTextTemplatePlugin) createTemplateProvider(
+func (p *plugin) createTemplateProvider(
 	templateInfo *spi.TemplateInfo,
-	currentTemplate goLangTextTemplateWrapper,
+	currentTemplate goTextTemplateWrapper,
 	onTemplateLoadDone templateResultConsumer) templateProvider {
 	var once sync.Once
-	var newTemplate goLangTextTemplateWrapper
+	var newTemplate goTextTemplateWrapper
 
 	// Initialize err with a value.  If loadTemplate completes normally, it will give us a new value.  If it panics,
 	// we'll end up using this value.
 	var err = errors.New(fmt.Sprintf("unable to load template \"%s\", loadTemplate function did not "+
 		"return a result", templateInfo.Name))
-	return func() (goLangTextTemplateWrapper, error) {
+	return func() (goTextTemplateWrapper, error) {
 		// Loads the template and saves the result (template or error) into local variables.
 		// The mutex within once.Do() ensures memory synchronization, so any go routines that execute this function are
 		// guaranteed to see the results after once.Do() completes.  We also execute onTemplateLoadDone, to let the
@@ -180,14 +180,14 @@ func (p *goLangTextTemplatePlugin) createTemplateProvider(
 	}
 }
 
-func (p *goLangTextTemplatePlugin) loadTemplate(
+func (p *plugin) loadTemplate(
 	templateInfo *spi.TemplateInfo,
-	currentTemplate goLangTextTemplateWrapper) (goLangTextTemplateWrapper, error) {
+	currentTemplate goTextTemplateWrapper) (goTextTemplateWrapper, error) {
 	//fmt.Printf("Loading template \"%s\" from \"%s\" (Full set of paths: %v)\n", templateInfo.Name, templateInfo.Paths[0], templateInfo.Paths)
 	fileModTimes, err := getFileModTimes(templateInfo.Paths, templateInfo.SourceFS)
 
 	if err != nil {
-		return goLangTextTemplateWrapper{}, fmt.Errorf("unable to load template \"%s\": %w", templateInfo.Name, err)
+		return goTextTemplateWrapper{}, fmt.Errorf("unable to load template \"%s\": %w", templateInfo.Name, err)
 	}
 
 	if isUpToDate(fileModTimes, currentTemplate) {
@@ -199,18 +199,18 @@ func (p *goLangTextTemplatePlugin) loadTemplate(
 		templateInfo.SourceFS, templateInfo.Paths...)
 
 	if err != nil {
-		return goLangTextTemplateWrapper{}, err
+		return goTextTemplateWrapper{}, err
 	}
 
 	childTemplates := rootTemplate.Templates()
 
 	if len(childTemplates) == 0 {
-		return goLangTextTemplateWrapper{}, errors.New("parse of template files did not create any new template instances")
+		return goTextTemplateWrapper{}, errors.New("parse of template files did not create any new template instances")
 	}
 
 	firstChildTemplate := childTemplates[0]
 
-	result := goLangTextTemplateWrapper{
+	result := goTextTemplateWrapper{
 		template:     firstChildTemplate,
 		templateName: templateInfo.Name,
 		fileModTimes: fileModTimes,
@@ -246,7 +246,7 @@ func getFileModTimes(paths []string, sourceFS fs.FS) (map[string]time.Time, erro
 	return result, nil
 }
 
-func isUpToDate(fileModTimes map[string]time.Time, currentTemplate goLangTextTemplateWrapper) bool {
+func isUpToDate(fileModTimes map[string]time.Time, currentTemplate goTextTemplateWrapper) bool {
 	if currentTemplate.template == nil {
 		return false
 	}
@@ -261,8 +261,8 @@ func isUpToDate(fileModTimes map[string]time.Time, currentTemplate goLangTextTem
 }
 
 // Implementation of spi.ITemplate
-var _ spi.ITemplate = (*goLangTextTemplateWrapper)(nil)
+var _ spi.ITemplate = (*goTextTemplateWrapper)(nil)
 
-func (t *goLangTextTemplateWrapper) Execute(wr io.Writer, data any) error {
+func (t *goTextTemplateWrapper) Execute(wr io.Writer, data any) error {
 	return t.template.Execute(wr, data)
 }

@@ -2,12 +2,12 @@ package gotexttemplate
 
 import "time"
 
-type GoLangTextTemplatePluginConfig struct {
+type PluginConfig struct {
 	templateCacheDuration time.Duration
 }
 
-func NewGoLangTextTemplatePluginConfig() GoLangTextTemplatePluginConfig {
-	return GoLangTextTemplatePluginConfig{
+func NewPluginConfig() PluginConfig {
+	return PluginConfig{
 		templateCacheDuration: 2 * time.Second,
 	}
 }
