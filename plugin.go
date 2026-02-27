@@ -70,8 +70,10 @@ func (p *plugin) Start() {
 	fmt.Printf("%s Starting...\n", *p)
 }
 
-func (p *plugin) Stop() {
+func (p *plugin) Stop() chan func() {
 	fmt.Printf("%s Stopping...\n", *p)
+
+	return p.state.container.ClosedCallbackChannel()
 }
 
 func (p *plugin) GetTemplate(templateInfo *spi.TemplateInfo) (spi.CompiledTemplate, error) {
