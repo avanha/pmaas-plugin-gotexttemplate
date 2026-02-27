@@ -62,6 +62,10 @@ func NewPlugin(config PluginConfig) Plugin {
 // Implementation of spi.IPMAASPlugin
 var _ spi.IPMAASTemplateEnginePlugin = (*plugin)(nil)
 
+func (p *plugin) ShortName() string {
+	return "gotexttemplate"
+}
+
 func (p *plugin) Init(container spi.IPMAASContainer) {
 	p.state.container = container
 }
@@ -210,10 +214,27 @@ func (p *plugin) loadTemplate(
 		return goTextTemplateWrapper{}, errors.New("parse of template files did not create any new template instances")
 	}
 
-	firstChildTemplate := childTemplates[0]
+	// With a single input file, ParseFS produces exactly one associated template (named after the
+	// file's base name), so which one that is can't be ambiguous. With more than one file - e.g. a
+	// shared layout plus a content template pulled in via {{template "content" .}} - ParseFS
+	// produces one associated template per {{define}} block (plus one per bare top-level file), and
+	// Templates() returns them in unspecified order (it walks an internal map), so the entry point
+	// must be picked by name instead of by position.
+	var selectedTemplate *template.Template
+
+	if len(templateInfo.Paths) == 1 {
+		selectedTemplate = childTemplates[0]
+	} else {
+		selectedTemplate = rootTemplate.Lookup(templateInfo.Name)
+
+		if selectedTemplate == nil {
+			return goTextTemplateWrapper{}, fmt.Errorf(
+				"template \"%s\" not found among parsed files %v", templateInfo.Name, templateInfo.Paths)
+		}
+	}
 
 	result := goTextTemplateWrapper{
-		template:     firstChildTemplate,
+		template:     selectedTemplate,
 		templateName: templateInfo.Name,
 		fileModTimes: fileModTimes,
 	}
