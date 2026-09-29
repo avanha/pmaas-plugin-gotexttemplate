@@ -1,7 +1,5 @@
 module github.com/avanha/pmaas-plugin-gotexttemplate
 
-go 1.22
+go 1.27.1
 
-toolchain go1.22.3
-
-require github.com/avanha/pmaas-spi v0.0.2
+require github.com/avanha/pmaas-spi v0.0.8
