@@ -3,8 +3,10 @@ package gotexttemplate
 import (
 	"errors"
 	"fmt"
+	"github.com/avanha/pmaas-spi/logging"
 	"io"
 	"io/fs"
+	"log/slog"
 	"sync"
 	"text/template"
 	"time"
@@ -22,6 +24,7 @@ type state struct {
 }
 
 type plugin struct {
+	log   *slog.Logger
 	state *state
 }
 
@@ -68,14 +71,15 @@ func (p *plugin) ShortName() string {
 
 func (p *plugin) Init(container spi.IPMAASContainer) {
 	p.state.container = container
+	p.log = logging.For(container)
 }
 
 func (p *plugin) Start() {
-	fmt.Printf("%s Starting...\n", *p)
+	p.log.Info("starting")
 }
 
 func (p *plugin) Stop() chan func() {
-	fmt.Printf("%s Stopping...\n", *p)
+	p.log.Info("stopping")
 
 	return p.state.container.ClosedCallbackChannel()
 }
@@ -85,7 +89,7 @@ func (p *plugin) GetTemplate(templateInfo *spi.TemplateInfo) (spi.CompiledTempla
 	templateInstance, err := p.getTemplateProvider(templateInfo)()
 
 	if err != nil {
-		fmt.Printf("GetTemplate completing with error after %v\n", time.Now().Sub(startTime))
+		p.log.Error("getTemplate completed with an error", "took", time.Since(startTime), "error", err)
 		return spi.CompiledTemplate{}, err
 	}
 
